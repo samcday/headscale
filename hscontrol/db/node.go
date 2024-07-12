@@ -662,6 +662,7 @@ func GenerateGivenName(
 
 func DeleteExpiredEphemeralNodes(tx *gorm.DB,
 	inactivityThreshold time.Duration,
+	isLikelyConnected *xsync.MapOf[types.NodeID, bool],
 ) ([]types.NodeID, []types.NodeID) {
 	users, err := ListUsers(tx)
 	if err != nil {
@@ -680,13 +681,17 @@ func DeleteExpiredEphemeralNodes(tx *gorm.DB,
 			if node.IsEphemeral() && node.LastSeen != nil &&
 				time.Now().
 					After(node.LastSeen.Add(inactivityThreshold)) {
+				if val, ok := isLikelyConnected.Load(node.ID); ok && val {
+					continue
+				}
+
 				expired = append(expired, node.ID)
 
 				log.Info().
 					Str("node", node.Hostname).
 					Msg("Ephemeral client removed from database")
 
-					// empty isConnected map as ephemeral nodes are not routes
+				// empty isConnected map as ephemeral nodes are not routes
 				changed, err := DeleteNode(tx, nodes[idx], nil)
 				if err != nil {
 					log.Error().
