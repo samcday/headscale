@@ -33,7 +33,6 @@ import (
 	"github.com/juanfont/headscale/hscontrol/policy"
 	"github.com/juanfont/headscale/hscontrol/types"
 	"github.com/juanfont/headscale/hscontrol/util"
-	"github.com/patrickmn/go-cache"
 	zerolog "github.com/philip-bui/grpc-zerolog"
 	"github.com/pkg/profile"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -90,6 +89,7 @@ type Headscale struct {
 	db              *db.HSDatabase
 	ipAlloc         *db.IPAllocator
 	noisePrivateKey *key.MachinePrivate
+	ephemeralGC     *db.EphemeralGarbageCollector
 
 	DERPMap    *tailcfg.DERPMap
 	DERPServer *derpServer.DERPServer
@@ -151,6 +151,12 @@ func NewHeadscale(cfg *types.Config) (*Headscale, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	app.ephemeralGC = db.NewEphemeralGarbageCollector(func(ni types.NodeID) {
+		if err := app.db.DeleteEphemeralNode(ni); err != nil {
+			log.Err(err).Uint64("node.id", ni.Uint64()).Msgf("failed to delete ephemeral node")
+		}
+	})
 
 	if cfg.OIDC.Issuer != "" {
 		err = app.initOIDC()
@@ -552,9 +558,7 @@ func (h *Headscale) Serve() error {
 		return errEmptyInitialDERPMap
 	}
 
-	expireEphemeralCtx, expireEphemeralCancel := context.WithCancel(context.Background())
-	defer expireEphemeralCancel()
-	go h.deleteExpireEphemeralNodes(expireEphemeralCtx, updateInterval)
+	go h.ephemeralGC.Start()
 
 	expireNodeCtx, expireNodeCancel := context.WithCancel(context.Background())
 	defer expireNodeCancel()
@@ -810,7 +814,7 @@ func (h *Headscale) Serve() error {
 					Msg("Received signal to stop, shutting down gracefully")
 
 				expireNodeCancel()
-				expireEphemeralCancel()
+				h.ephemeralGC.Close()
 
 				trace("waiting for netmap stream to close")
 				h.pollNetMapStreamWG.Wait()
