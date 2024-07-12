@@ -7,7 +7,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/juanfont/headscale/hscontrol/notifier"
 	"github.com/juanfont/headscale/hscontrol/types"
 	"github.com/juanfont/headscale/hscontrol/util"
 	"github.com/patrickmn/go-cache"
@@ -663,7 +662,7 @@ func GenerateGivenName(
 
 func DeleteExpiredEphemeralNodes(tx *gorm.DB,
 	inactivityThreshold time.Duration,
-	notifier *notifier.Notifier,
+	isLikelyConnected *xsync.MapOf[types.NodeID, bool],
 ) ([]types.NodeID, []types.NodeID) {
 	users, err := ListUsers(tx)
 	if err != nil {
@@ -678,7 +677,6 @@ func DeleteExpiredEphemeralNodes(tx *gorm.DB,
 			return nil, nil
 		}
 
-	NodeLoop:
 		for idx, node := range nodes {
 			if node.IsEphemeral() && node.LastSeen != nil &&
 				time.Now().
@@ -688,10 +686,8 @@ func DeleteExpiredEphemeralNodes(tx *gorm.DB,
 					return nil, nil
 				}
 
-				for _, peer := range peers {
-					if notifier.IsLikelyConnected(peer.ID) {
-						continue NodeLoop
-					}
+				if val, ok := isLikelyConnected.Load(node.ID); ok && val {
+					continue
 				}
 
 				expired = append(expired, node.ID)
