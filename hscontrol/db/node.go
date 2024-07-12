@@ -681,11 +681,6 @@ func DeleteExpiredEphemeralNodes(tx *gorm.DB,
 			if node.IsEphemeral() && node.LastSeen != nil &&
 				time.Now().
 					After(node.LastSeen.Add(inactivityThreshold)) {
-				peers, err := ListPeers(tx, node.ID)
-				if err != nil {
-					return nil, nil
-				}
-
 				if val, ok := isLikelyConnected.Load(node.ID); ok && val {
 					continue
 				}
