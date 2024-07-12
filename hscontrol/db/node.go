@@ -677,7 +677,7 @@ func DeleteExpiredEphemeralNodes(tx *gorm.DB,
 		}
 
 		for idx, node := range nodes {
-			if node.IsEphemeral() && node.LastSeen != nil &&
+			if node.IsEphemeral() && !*node.IsOnline && node.LastSeen != nil &&
 				time.Now().
 					After(node.LastSeen.Add(inactivityThreshold)) {
 				expired = append(expired, node.ID)
