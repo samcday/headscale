@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/juanfont/headscale/hscontrol/notifier"
 	"github.com/juanfont/headscale/hscontrol/types"
 	"github.com/juanfont/headscale/hscontrol/util"
 	"github.com/patrickmn/go-cache"
@@ -662,6 +663,7 @@ func GenerateGivenName(
 
 func DeleteExpiredEphemeralNodes(tx *gorm.DB,
 	inactivityThreshold time.Duration,
+	notifier *notifier.Notifier,
 ) ([]types.NodeID, []types.NodeID) {
 	users, err := ListUsers(tx)
 	if err != nil {
@@ -676,17 +678,29 @@ func DeleteExpiredEphemeralNodes(tx *gorm.DB,
 			return nil, nil
 		}
 
+	NodeLoop:
 		for idx, node := range nodes {
-			if node.IsEphemeral() && !(node.IsOnline != nil && *node.IsOnline) && node.LastSeen != nil &&
+			if node.IsEphemeral() && node.LastSeen != nil &&
 				time.Now().
 					After(node.LastSeen.Add(inactivityThreshold)) {
+				peers, err := ListPeers(tx, node.ID)
+				if err != nil {
+					return nil, nil
+				}
+
+				for _, peer := range peers {
+					if notifier.IsLikelyConnected(peer.ID) {
+						continue NodeLoop
+					}
+				}
+
 				expired = append(expired, node.ID)
 
 				log.Info().
 					Str("node", node.Hostname).
 					Msg("Ephemeral client removed from database")
 
-					// empty isConnected map as ephemeral nodes are not routes
+				// empty isConnected map as ephemeral nodes are not routes
 				changed, err := DeleteNode(tx, nodes[idx], nil)
 				if err != nil {
 					log.Error().

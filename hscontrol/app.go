@@ -230,7 +230,7 @@ func (h *Headscale) deleteExpireEphemeralNodes(ctx context.Context, every time.D
 			var removed []types.NodeID
 			var changed []types.NodeID
 			if err := h.db.Write(func(tx *gorm.DB) error {
-				removed, changed = db.DeleteExpiredEphemeralNodes(tx, h.cfg.EphemeralNodeInactivityTimeout)
+				removed, changed = db.DeleteExpiredEphemeralNodes(tx, h.cfg.EphemeralNodeInactivityTimeout, h.nodeNotifier)
 
 				return nil
 			}); err != nil {
