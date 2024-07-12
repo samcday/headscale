@@ -110,7 +110,7 @@ kos:
       - "sha-{{ .ShortCommit }}"
 
   - id: ghcr-debug
-    repository: ghcr.io/juanfont/headscale
+    repository: ghcr.io/samcday/headscale
     bare: true
     base_image: gcr.io/distroless/base-debian12:debug
     build: headscale
